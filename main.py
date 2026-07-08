@@ -13,6 +13,7 @@ fantasy-bball-ranker CLI
   python main.py train                          Retrain intuition model on swipe + draft history
   python main.py stat-model                     Run stat model analysis, save plots to outputs/
   python main.py espn-import                    Re-sync draft history from ESPN league
+  python main.py insights                       Run analytical SQL queries (VOR, risers, hidden gems)
   python main.py test                           Run pytest suite
   python main.py status                         Print DB counts, model info, injury flags
 
@@ -181,6 +182,70 @@ def cmd_espn_import() -> None:
     espn_main()
 
 
+def cmd_insights() -> None:
+    import sqlite3
+    from db import ALL_SEASONS, CURRENT_SEASON, DB_PATH
+
+    if not DB_PATH.exists():
+        print("No database. Run `python main.py ingest` first.")
+        return
+
+    prev_season = ALL_SEASONS[ALL_SEASONS.index(CURRENT_SEASON) - 1] if CURRENT_SEASON in ALL_SEASONS else None
+    sql_path    = BASE_DIR / "sql" / "queries.sql"
+    raw_sql     = sql_path.read_text()
+
+    # Split on blank lines between statements, skip comment-only blocks
+    blocks = [b.strip() for b in raw_sql.split(";\n\n") if b.strip()]
+    queries = []
+    for block in blocks:
+        lines = [l for l in block.splitlines() if not l.strip().startswith("--") and l.strip()]
+        if lines:
+            queries.append(block.rstrip(";"))
+
+    titles = [
+        "Top 30 by Fantasy PPG",
+        "Top 10 per Position",
+        "Value Over Replacement",
+        "Hidden Gems (drafted after round 8, now top-40)",
+        "Year-over-Year Risers (up 15%+)",
+    ]
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    for i, (title, sql) in enumerate(zip(titles, queries)):
+        # Query 5 needs prev_season; skip if we don't have one
+        if ":prev_season" in sql and not prev_season:
+            continue
+
+        params = {"season": CURRENT_SEASON}
+        if prev_season:
+            params["prev_season"] = prev_season
+
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        except Exception as e:
+            print(f"\n[{title}] skipped: {e}")
+            continue
+
+        print(f"\n{'='*60}")
+        print(f"  {title}")
+        print(f"{'='*60}")
+        if not rows:
+            print("  (no results)")
+            continue
+
+        cols   = rows[0].keys()
+        widths = [max(len(str(c)), max(len(str(r[c])) for r in rows)) for c in cols]
+        header = "  " + "  ".join(str(c).ljust(w) for c, w in zip(cols, widths))
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for r in rows:
+            print("  " + "  ".join(str(r[c]).ljust(w) for c, w in zip(cols, widths)))
+
+    conn.close()
+
+
 def cmd_test() -> None:
     print("=== Running pytest Suite ===")
     result = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-v"], cwd=BASE_DIR)
@@ -231,6 +296,7 @@ COMMANDS = {
     "train":        cmd_train,
     "stat-model":   cmd_stat_model,
     "espn-import":  cmd_espn_import,
+    "insights":     cmd_insights,
     "test":         cmd_test,
     "status":       cmd_status,
 }
