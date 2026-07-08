@@ -2,7 +2,6 @@
 
 **A pure ML ranker that ranks NBA players the way I would, trained on my own draft history and player preferences.**
 
-No LLM. No API calls to AI services. Just scikit-learn trained on real behavior.
 
 ---
 
@@ -32,7 +31,7 @@ ranking                   preference scores
 ```
 
 1. **ETL Pipeline** pulls ESPN fantasy stats for 6 seasons, computes fantasy points per game under my league's scoring, and stores everything in SQLite.
-2. **Stat Model** (`models/stat_model.py`) fits a `LinearRegression` trained on 2022–24 seasons to predict current-season fantasy PPG. Also generates four diagnostic plots (tier chart, correlation heatmap, positional boxplot, predicted vs actual).
+2. **Stat Model** (`models/stat_model.py`) fits a `LinearRegression` trained on 2019–24 seasons to predict current-season fantasy PPG. Also generates four diagnostic plots (tier chart, correlation heatmap, positional boxplot, predicted vs actual).
 3. **Intuition Model** (`models/intuition_model.py`) trains a `LogisticRegression` on pairwise comparisons — swipes from the Flask UI and implicit preferences inferred from draft order. It learns which stats I actually value, not what the model says I should.
 4. **Blended Ranker** (`models/ranker.py`) takes the top 60 players by fantasy PPG, runs a round-robin tournament using the intuition model, then blends 65% stat rank + 35% intuition score into a final top 40.
 
