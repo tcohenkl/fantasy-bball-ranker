@@ -9,6 +9,22 @@
 
 ---
 
+## Screenshots
+
+**Landing page**
+![Landing](screenshots/landing.png)
+
+**Swipe UI** — pick which player you'd rather have; stats shown side-by-side
+![Swipe](screenshots/swipe.png)
+
+**Rankings** — personalized top-40 blending stat model + your intuition
+![Rankings](screenshots/rankings.png)
+
+**Stats** — swipe history, model confidence, and your learned preference profile
+![Stats](screenshots/stats.png)
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
