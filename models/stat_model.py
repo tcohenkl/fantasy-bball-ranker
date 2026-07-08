@@ -32,7 +32,7 @@ def load_data() -> pd.DataFrame:
         SELECT p.player_id, p.name, p.team, p.position, ps.season, ps.gp,
                ps.pts, ps.fg3m, ps.fgm, ps.fga, ps.ftm, ps.fta,
                ps.reb, ps.ast, ps.stl, ps.blk, ps.tov,
-               fs.fantasy_ppg, fs.consistency_score
+               fs.fantasy_ppg
         FROM player_stats ps
         JOIN players p        ON p.player_id = ps.player_id
         JOIN fantasy_scores fs ON fs.player_id = ps.player_id
@@ -111,58 +111,6 @@ def _save(fig, name: str) -> None:
     plt.close(fig)
     print(f"  Saved: outputs/{name}")
 
-
-def plot_tier_chart(df: pd.DataFrame) -> None:
-    data = (
-        df[(df["season"] == CURRENT_SEASON) & df["consistency_score"].notna() & (df["gp"] >= 15)]
-        .sort_values("fantasy_ppg", ascending=False)
-        .reset_index(drop=True)
-    )
-    if data.empty:
-        print("  Tier chart skipped -- no current-season data with consistency scores.")
-        return
-
-    med_x = data["consistency_score"].median()
-    med_y = data["fantasy_ppg"].median()
-    top40 = set(data.head(40)["name"])
-
-    fig, ax = _dark_fig(15, 10)
-
-    for pos, grp in data.groupby("position"):
-        color = POS_COLORS.get(pos, "#888")
-        ax.scatter(grp["consistency_score"], grp["fantasy_ppg"],
-                   color=color, s=40, alpha=0.75, label=pos, zorder=3)
-
-    for _, row in data[data["name"].isin(top40)].iterrows():
-        ax.annotate(
-            row["name"],
-            (row["consistency_score"], row["fantasy_ppg"]),
-            fontsize=6.5, color="#ddd",
-            xytext=(4, 3), textcoords="offset points",
-        )
-
-    ax.axvline(med_x, linestyle="--", color="white", alpha=0.35, linewidth=0.8)
-    ax.axhline(med_y, linestyle="--", color="white", alpha=0.35, linewidth=0.8)
-
-    x_max = data["consistency_score"].max()
-    y_max = data["fantasy_ppg"].max()
-    y_min = data["fantasy_ppg"].min()
-
-    for label, xpos, ypos, color in [
-        ("Safe Stars",    med_x * 0.25, y_max * 0.96, "#4ade80"),
-        ("Boom or Bust",  x_max * 0.82, y_max * 0.96, "#f97316"),
-        ("Reliable Bench",med_x * 0.25, y_min * 1.10, "#60a5fa"),
-        ("Skip",          x_max * 0.82, y_min * 1.10, "#f43f5e"),
-    ]:
-        ax.text(xpos, ypos, label, color=color, fontsize=9, fontweight="bold")
-
-    ax.set_xlabel("Consistency Score (std dev -- lower = more consistent)", color=TEXT_CLR)
-    ax.set_ylabel("Fantasy PPG", color=TEXT_CLR)
-    ax.set_title(f"Player Tier Chart -- {CURRENT_SEASON}", color=TEXT_CLR, fontsize=14)
-    ax.legend(facecolor=DARK_BG, labelcolor=TEXT_CLR, title="Position",
-              title_fontsize=8, framealpha=0.8)
-
-    _save(fig, "player_tiers.png")
 
 
 def plot_correlation_heatmap(df: pd.DataFrame) -> None:
@@ -263,7 +211,6 @@ def run_analysis() -> None:
     run_feature_importance(df)
 
     print("\nGenerating plots...")
-    plot_tier_chart(df)
     plot_correlation_heatmap(df)
     plot_positional_boxplot(df)
     plot_predicted_vs_actual(pred_results["test_df"], pred_results["rmse"])
