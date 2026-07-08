@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fantasy Bball Ranker — Swipe</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0f0f;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #222;
+    }
+    header h1 { font-size: 1.15rem; letter-spacing: -0.02em; }
+    header h1 span { color: #f97316; }
+
+    .meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+    .badge {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .badge-LOW    { background: #7f1d1d; color: #fca5a5; }
+    .badge-MEDIUM { background: #78350f; color: #fcd34d; }
+    .badge-HIGH   { background: #14532d; color: #86efac; }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    /* ── Landing ── */
+    .landing {
+      text-align: center;
+      max-width: 520px;
+    }
+    .landing h2 { font-size: 2rem; margin-bottom: 12px; }
+    .landing p  { color: #aaa; margin-bottom: 28px; font-size: 1rem; line-height: 1.6; }
+    .btn {
+      display: inline-block;
+      background: #f97316;
+      color: #fff;
+      padding: 14px 36px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #ea6a00; }
+    .btn-secondary {
+      display: inline-block;
+      background: #222;
+      color: #ddd;
+      padding: 12px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      margin-left: 12px;
+    }
+    .btn-secondary:hover { background: #333; }
+
+    /* ── Swipe prompt ── */
+    .swipe-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .swipe-header h2 { font-size: 1.4rem; color: #fff; }
+    .swipe-header p  { color: #888; font-size: 0.85rem; margin-top: 4px; }
+
+    /* ── Cards ── */
+    .cards {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+      max-width: 980px;
+    }
+
+    .card-form { flex: 1; display: flex; }
+
+    .player-card {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 28px 24px;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.12s, background 0.15s;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .player-card:hover {
+      border-color: #f97316;
+      background: #1f1a15;
+      transform: translateY(-3px);
+    }
+    .player-card:active { transform: translateY(0); }
+
+    .card-pos   { font-size: 0.8rem; color: #888; letter-spacing: 0.04em; }
+    .card-team  { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+    .team-abbr  { font-size: 0.85rem; font-weight: 700; color: #f97316; letter-spacing: 0.06em; }
+    .team-record { font-size: 0.78rem; color: #aaa; }
+    .team-seed  { font-size: 0.7rem; background: #1e2a1e; color: #4ade80; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+    .card-ppg   {
+      font-size: 2.6rem; font-weight: 900; color: #f97316;
+      line-height: 1;
+    }
+    .card-ppg span { font-size: 0.85rem; color: #666; font-weight: 400; display: block; margin-top: 2px; }
+    .divider { border: none; border-top: 1px solid #242424; margin: 10px 0; }
+
+    /* 4-col counting stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .stat-cell {
+      background: #141414;
+      border-radius: 8px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .stat-cell .slabel { font-size: 0.6rem; color: #555; text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-cell .sval   { font-size: 1rem; font-weight: 700; color: #e0e0e0; margin-top: 3px; }
+    .sval-hl { color: #f97316 !important; }
+
+    /* Shooting splits + usage */
+    .shooting {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .shot-cell {
+      background: #141414;
+      border-radius: 8px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .shot-cell .slabel { font-size: 0.6rem; color: #555; text-transform: uppercase; letter-spacing: 0.07em; }
+    .shot-pct  { font-size: 1rem; font-weight: 800; color: #e0e0e0; margin-top: 3px; }
+    .shot-line { font-size: 0.7rem; color: #666; margin-top: 2px; }
+
+    /* Footer */
+    .card-footer { font-size: 0.72rem; color: #555; display: flex; gap: 14px; }
+
+    .vs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: #444;
+      min-width: 36px;
+    }
+
+    /* ── Stats page ── */
+    .stats-page { max-width: 640px; width: 100%; }
+    .stats-page h2 { font-size: 1.6rem; margin-bottom: 20px; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-box {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .stat-box .label { font-size: 0.75rem; color: #777; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .stat-box .value { font-size: 1.6rem; font-weight: 800; color: #f97316; }
+    .profile-box {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 18px 20px;
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: #ccc;
+    }
+    .profile-box h3 { color: #fff; font-size: 1rem; margin-bottom: 10px; }
+    .nav-links { margin-top: 24px; display: flex; gap: 12px; }
+
+    /* ── Done ── */
+    .done-page { text-align: center; max-width: 480px; }
+    .done-page h2 { font-size: 1.8rem; margin-bottom: 12px; }
+    .done-page p  { color: #888; margin-bottom: 24px; }
+
+    /* ── Rankings page ── */
+    .rankings-page { width: 100%; max-width: 1400px; padding: 0 8px; }
+    .rankings-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:12px; }
+    .rankings-header h2 { font-size:1.4rem; }
+
+    .view-toggle { display:flex; gap:4px; }
+    .vtoggle {
+      padding: 6px 16px; border-radius: 8px; border: 1px solid #333;
+      background: #111; color: #666; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .vtoggle.active { background: #f97316; color: #fff; border-color: #f97316; }
+    .vtoggle:hover:not(.active) { background: #1a1a1a; color: #aaa; }
+
+    .legend { display:flex; gap:16px; margin-bottom:10px; font-size:0.72rem; color:#666; align-items:center; }
+    .leg-item { display:flex; align-items:center; gap:6px; }
+    .leg-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+    .tbl-wrap { overflow-x: auto; }
+    .rtbl { width:100%; border-collapse:collapse; font-size:0.82rem; white-space:nowrap; }
+    .rtbl thead tr { background:#111; }
+    .rtbl th { padding:8px 10px; color:#666; font-weight:600; text-align:center; border-bottom:1px solid #222; position:sticky; top:0; background:#0f0f0f; z-index:1; }
+    .rtbl th.left, .rtbl td.left { text-align:left; }
+    .rtbl td { padding:7px 10px; text-align:center; border-bottom:1px solid #141414; }
+    .rtbl td.pname { font-weight:600; color:#e8e8e8; min-width:160px; }
+    .rtbl td.fppg  { font-weight:700; color:#f97316; }
+    .rtbl td.tov   { color:#e05252; }
+    .rtbl td.dim   { color:#555; }
+    .rtbl td.mv    { font-size:0.75rem; color:#888; }
+    .rtbl td.mv-up { color:#4ade80; }
+    .rtbl td.mv-dn { color:#f87171; }
+    .rtbl td.inj-out { color:#f87171; font-weight:700; font-size:0.72rem; }
+    .rtbl td.inj-dtd { color:#fcd34d; font-weight:700; font-size:0.72rem; }
+    .rtbl tr.row-alt  td { background:#0c0c14; }
+    .rtbl tr.row-out  td { background:#1c0808; }
+    .rtbl tr.row-dtd  td { background:#1c1208; }
+    .rtbl tr.row-up   td { background:#0a1a0a; }
+    .rtbl tr.row-down td { background:#1a0a0a; }
+    .rtbl tr:hover td { background:#1a1a28; }
+    .team-cell { display:flex; align-items:center; gap:5px; justify-content:center; }
+    .tc-abbr { font-weight:700; color:#f97316; font-size:0.8rem; }
+    .tc-rec  { color:#888; font-size:0.72rem; }
+    .tc-seed { background:#1a2a1a; color:#4ade80; font-size:0.65rem; padding:1px 5px; border-radius:999px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .cards { flex-direction: column; }
+      .vs { display: none; }
+      .card-ppg { font-size: 1.8rem; }
+      .stat-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Fantasy <span>Bball</span> Ranker</h1>
+  <div class="meta">
+    <span>{{ swipe_count }} swipes</span>
+    <span class="badge badge-{{ confidence }}">{{ confidence }}</span>
+    <a href="/rankings" style="color:{% if page=='rankings' %}#f97316{% else %}#888{% endif %};text-decoration:none;font-size:0.82rem;">Rankings</a>
+    <a href="/stats"    style="color:{% if page=='stats'    %}#f97316{% else %}#888{% endif %};text-decoration:none;font-size:0.82rem;">Stats</a>
+  </div>
+</header>
+
+<main>
+
+  {% if page == 'landing' %}
+  <div class="landing">
+    <h2>Who would you<br/>rather have?</h2>
+    <p>
+      Swipe through player matchups to train your personal fantasy AI.
+      The more you swipe, the better it learns what <em>you</em> value —
+      not what the stats say.
+    </p>
+    <a href="/swipe" class="btn">Start Swiping</a>
+    <a href="/stats" class="btn-secondary">View Stats</a>
+  </div>
+
+  {% elif page == 'swipe' %}
+  <div class="swipe-header">
+    <h2>Who would you rather have?</h2>
+    <p>Swipe count: {{ swipe_count }} &nbsp;·&nbsp; Confidence: {{ confidence }}</p>
+  </div>
+
+  <div class="cards">
+    {% for player, other in [(player_a, player_b), (player_b, player_a)] %}
+    <form class="card-form" action="/swipe" method="POST">
+      <input type="hidden" name="winner_id" value="{{ player.player_id }}" />
+      <input type="hidden" name="loser_id"  value="{{ other.player_id }}" />
+      <button type="submit" class="player-card" style="background:none; border:1px solid #2a2a2a; text-align:left;">
+
+        <!-- Header -->
+        <div class="card-pos">{{ player.position }}{% if player.min %} &nbsp;·&nbsp; {{ "%.1f"|format(player.min) }} MIN{% endif %}</div>
+        {% if player.team_abbr %}
+        <div class="card-team">
+          <span class="team-abbr">{{ player.team_abbr }}</span>
+          <span class="team-record">{{ player.team_wins }}-{{ player.team_losses }}</span>
+          {% if player.team_seed %}<span class="team-seed">#{{ player.team_seed }} {{ player.team_conf }}</span>{% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Fantasy PPG hero -->
+        <div class="card-ppg">
+          {{ "%.1f"|format(player.fantasy_ppg) }}
+          <span>fantasy ppg</span>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Counting stats 4-col -->
+        <div class="stat-grid">
+          <div class="stat-cell"><div class="slabel">PTS</div><div class="sval">{{ "%.1f"|format(player.pts) }}</div></div>
+          <div class="stat-cell"><div class="slabel">REB</div><div class="sval">{{ "%.1f"|format(player.reb) }}</div></div>
+          <div class="stat-cell"><div class="slabel">AST</div><div class="sval">{{ "%.1f"|format(player.ast) }}</div></div>
+          <div class="stat-cell"><div class="slabel">TOV</div><div class="sval" style="color:#e05252">{{ "%.1f"|format(player.tov) }}</div></div>
+          <div class="stat-cell"><div class="slabel">STL</div><div class="sval">{{ "%.1f"|format(player.stl) }}</div></div>
+          <div class="stat-cell"><div class="slabel">BLK</div><div class="sval">{{ "%.1f"|format(player.blk) }}</div></div>
+          <div class="stat-cell"><div class="slabel">3PM</div><div class="sval">{{ "%.1f"|format(player.fg3m) }}</div></div>
+          <div class="stat-cell"><div class="slabel">FTM</div><div class="sval">{{ "%.1f"|format(player.ftm) }}</div></div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Shooting splits + usage -->
+        <div class="shooting">
+          {% set fg_pct = (player.fgm / player.fga * 100) if player.fga else 0 %}
+          {% set ft_pct = (player.ftm / player.fta * 100) if player.fta else 0 %}
+          {% set fg3_pct = (player.fg3m / player.fg3a * 100) if player.fg3a else 0 %}
+          {% set usg_pct = ((player.fga + 0.44 * player.fta + player.tov) / player.min * 36) if player.min else 0 %}
+          <div class="shot-cell">
+            <div class="slabel">FG</div>
+            <div class="shot-pct">{{ "%.1f"|format(fg_pct) }}%</div>
+            <div class="shot-line">{{ "%.1f"|format(player.fgm) }} / {{ "%.1f"|format(player.fga) }}</div>
+          </div>
+          <div class="shot-cell">
+            <div class="slabel">FT</div>
+            <div class="shot-pct">{{ "%.1f"|format(ft_pct) }}%</div>
+            <div class="shot-line">{{ "%.1f"|format(player.ftm) }} / {{ "%.1f"|format(player.fta) }}</div>
+          </div>
+          <div class="shot-cell">
+            <div class="slabel">3PT</div>
+            <div class="shot-pct">{{ "%.1f"|format(fg3_pct) }}%</div>
+            <div class="shot-line">{{ "%.1f"|format(player.fg3m) }} / {{ "%.1f"|format(player.fg3a) }}</div>
+          </div>
+          <div class="shot-cell">
+            <div class="slabel">USG</div>
+            <div class="shot-pct">{{ "%.1f"|format(usg_pct) }}%</div>
+            <div class="shot-line">per 36 min</div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Footer -->
+        <div class="card-footer">
+          <span>{{ player.gp }} GP this season</span>
+          {% if player.gp_prev_season %}<span>{{ player.gp_prev_season }} GP prev season</span>{% endif %}
+        </div>
+
+      </button>
+    </form>
+    {% if loop.first %}<div class="vs">VS</div>{% endif %}
+    {% endfor %}
+  </div>
+
+  <script>
+    // Auto-retrain every 20 swipes (triggered server-side, but also ensure UI refresh)
+    const count = {{ swipe_count }};
+    if (count > 0 && count % 20 === 0) {
+      fetch('/train', { method: 'POST' });
+    }
+  </script>
+
+  {% elif page == 'stats' %}
+  <div class="stats-page">
+    <h2>Your Swipe Stats</h2>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="label">Total Swipes</div>
+        <div class="value">{{ swipe_count }}</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Upsets Chosen</div>
+        <div class="value">{{ upset_count }}</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Model Confidence</div>
+        <div class="value" style="font-size:1.1rem; color: {% if confidence == 'HIGH' %}#4ade80{% elif confidence == 'MEDIUM' %}#fcd34d{% else %}#f87171{% endif %};">
+          {{ confidence }}
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Last Trained</div>
+        <div class="value" style="font-size:1rem; color:#ccc;">
+          {% if model_version %}{{ model_version.trained_at[:16] }}{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-box">
+      <h3>Your Preference Profile</h3>
+      {{ preference_profile }}
+    </div>
+
+    <div class="nav-links">
+      <a href="/swipe" class="btn">Keep Swiping</a>
+      <a href="/" class="btn-secondary">Home</a>
+    </div>
+  </div>
+
+  {% elif page == 'done' %}
+  <div class="done-page">
+    <h2>You've seen everyone!</h2>
+    <p>All valid player pairs have been compared. Your model is well-trained.</p>
+    <a href="/stats" class="btn">View Profile</a>
+  </div>
+
+  {% elif page == 'rankings' %}
+  <div class="rankings-page">
+    <div class="rankings-header">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <h2>Rankings <span style="color:#f97316;">{{ season }}</span></h2>
+          <p style="color:#555;font-size:0.8rem;margin-top:3px;">{{ confidence }} confidence · {{ rows|length }} players</p>
+        </div>
+        <!-- View toggle -->
+        <div class="view-toggle">
+          <button id="btn-yours" class="vtoggle active" onclick="setView('yours')">Your Rankings</button>
+          <button id="btn-fppg"  class="vtoggle"        onclick="setView('fppg')">Pure FPPG</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;">
+        {% for s in all_seasons|reverse %}
+        <a href="/rankings?season={{ s }}"
+           style="padding:4px 10px;border-radius:6px;font-size:0.75rem;text-decoration:none;
+                  background:{% if s==season %}#f97316{% else %}#1a1a1a{% endif %};
+                  color:{% if s==season %}#fff{% else %}#666{% endif %};">{{ s }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Legend for big movers -->
+    <div class="legend">
+      <span class="leg-item"><span class="leg-dot" style="background:#1a3a1a;border:1px solid #4ade80;"></span> Ranked up by your model</span>
+      <span class="leg-item"><span class="leg-dot" style="background:#3a1a1a;border:1px solid #f87171;"></span> Ranked down by your model</span>
+      <span class="leg-item"><span style="color:#f87171;font-weight:700;font-size:0.75rem;">OUT</span> &nbsp;Injured</span>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="rtbl" id="rankings-table">
+        <thead>
+          <tr>
+            <th class="your-col" title="Your intuition-adjusted rank">Your #</th>
+            <th class="fppg-col" title="Raw fantasy PPG rank" style="display:none">FPPG #</th>
+            <th class="left">Player</th>
+            <th>Pos</th><th>Team</th><th>Inj</th>
+            <th>FPPG</th>
+            <th class="your-col" title="How much the model moved this player vs pure FPPG">Δ</th>
+            <th class="fppg-col" title="Your intuition rank for comparison" style="display:none">Your #</th>
+            <th>PTS</th><th>REB</th><th>AST</th>
+            <th>STL</th><th>BLK</th><th>TOV</th>
+            <th>3PM</th><th>3PA</th><th>3P%</th>
+            <th>FGM</th><th>FGA</th><th>FG%</th>
+            <th>FT%</th><th>USG%</th><th>MIN</th>
+            <th>GP</th><th>Prev</th>
+          </tr>
+        </thead>
+        <tbody id="rtbl-body">
+          {% for r in rows %}
+          {% set inj = (r.injury_status or 'ACTIVE')|upper %}
+          {% set diff = (r.stat_rank - r.final_rank) if r.stat_rank else 0 %}
+          {% set big_up   = diff >= 3 %}
+          {% set big_down = diff <= -3 %}
+          <tr data-your-rank="{{ r.final_rank }}"
+              data-fppg-rank="{{ r.stat_rank or r.final_rank }}"
+              class="{% if 'OUT' in inj or 'IR' in inj %}row-out{% elif 'QUEST' in inj or 'DAY' in inj or 'DOUBT' in inj %}row-dtd{% elif big_up %}row-up{% elif big_down %}row-down{% elif loop.index is even %}row-alt{% endif %}">
+            <td class="rnk your-col">{{ r.final_rank }}</td>
+            <td class="rnk fppg-col" style="display:none">{{ r.stat_rank or '—' }}</td>
+            <td class="left pname">{{ r.name }}</td>
+            <td>{{ r.position or '?' }}</td>
+            <td class="team-cell">
+              {% if r.team_abbr %}
+              <span class="tc-abbr">{{ r.team_abbr }}</span>
+              <span class="tc-rec">{{ r.team_wins }}-{{ r.team_losses }}</span>
+              {% if r.team_seed %}<span class="tc-seed">#{{ r.team_seed }}{{ r.team_conf[:1] }}</span>{% endif %}
+              {% endif %}
+            </td>
+            <td class="{% if 'OUT' in inj %}inj-out{% elif 'QUEST' in inj or 'DAY' in inj %}inj-dtd{% endif %}">
+              {% if 'OUT' in inj or 'IR' in inj %}OUT
+              {% elif 'QUEST' in inj or 'DAY' in inj %}Q
+              {% elif 'DOUBT' in inj %}D{% endif %}
+            </td>
+            <td class="fppg">{{ "%.1f"|format(r.fantasy_ppg or 0) }}</td>
+            <!-- Delta column: shown in "yours" view -->
+            <td class="your-col mv {% if diff > 0 %}mv-up{% elif diff < 0 %}mv-dn{% endif %}">
+              {% if diff > 0 %}+{{ diff }}{% elif diff < 0 %}{{ diff }}{% endif %}
+            </td>
+            <!-- Your rank: shown in "fppg" view -->
+            <td class="fppg-col" style="display:none;color:{% if diff > 0 %}#4ade80{% elif diff < 0 %}#f87171{% else %}#555{% endif %}">
+              {{ r.final_rank }}{% if diff > 0 %} ▲{% elif diff < 0 %} ▼{% endif %}
+            </td>
+            <td>{{ "%.1f"|format(r.pts or 0) }}</td>
+            <td>{{ "%.1f"|format(r.reb or 0) }}</td>
+            <td>{{ "%.1f"|format(r.ast or 0) }}</td>
+            <td>{{ "%.1f"|format(r.stl or 0) }}</td>
+            <td>{{ "%.1f"|format(r.blk or 0) }}</td>
+            <td class="tov">{{ "%.1f"|format(r.tov or 0) }}</td>
+            <td>{{ "%.1f"|format(r.fg3m or 0) }}</td>
+            <td class="dim">{{ "%.1f"|format(r.fg3a or 0) }}</td>
+            <td>{{ "%.1f"|format(r.fg3_pct or 0) }}%</td>
+            <td>{{ "%.1f"|format(r.fgm or 0) }}</td>
+            <td class="dim">{{ "%.1f"|format(r.fga or 0) }}</td>
+            <td>{{ "%.1f"|format(r.fg_pct or 0) }}%</td>
+            <td>{{ "%.1f"|format(r.ft_pct or 0) }}%</td>
+            <td>{{ "%.1f"|format(r.usg_pct or 0) }}%</td>
+            <td>{{ "%.1f"|format(r.min or 0) }}</td>
+            <td>{{ r.gp or 0 }}</td>
+            <td class="dim">{{ r.gp_prev_season or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function setView(mode) {
+      const isYours = mode === 'yours';
+      document.getElementById('btn-yours').classList.toggle('active', isYours);
+      document.getElementById('btn-fppg').classList.toggle('active', !isYours);
+
+      // Toggle column visibility
+      document.querySelectorAll('.your-col').forEach(el => el.style.display = isYours ? '' : 'none');
+      document.querySelectorAll('.fppg-col').forEach(el => el.style.display = isYours ? 'none' : '');
+
+      // Re-sort rows
+      const tbody = document.getElementById('rtbl-body');
+      const rows  = Array.from(tbody.querySelectorAll('tr'));
+      const attr  = isYours ? 'data-your-rank' : 'data-fppg-rank';
+      rows.sort((a, b) => parseInt(a.getAttribute(attr)) - parseInt(b.getAttribute(attr)));
+      rows.forEach(r => tbody.appendChild(r));
+    }
+  </script>
+  {% endif %}
+
+</main>
+
+</body>
+</html>
