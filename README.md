@@ -1,37 +1,40 @@
 # Fantasy Basketball AI Ranker
 
-**An LLM that ranks NBA players the way I would, trained on my own draft history and player preferences.**
+**A pure ML ranker that ranks NBA players the way I would, trained on my own draft history and player preferences.**
+
+No LLM. No API calls to AI services. Just scikit-learn trained on real behavior.
 
 ---
 
 ## How It Works
 
-Three layers work together to produce rankings that reflect my actual preferences — not a generic model's:
-
 ```
-NBA Stats API
-     │
-     ▼
+ESPN Fantasy API
+      │
+      ▼
  ETL Pipeline (Python)
  SQLite Database
-     │
-     ├──────────────────────┐
-     ▼                      ▼
-Stat Model (R)       Intuition Model (sklearn)
-Regression +         Trained on swipe history
-Visualizations       + draft picks
-     │                      │
-     └──────────┬───────────┘
-                ▼
-         LLM Ranker (Claude)
-         Top 20 + reasoning
-         in user's voice
+      │
+      ├──────────────────────────┐
+      ▼                          ▼
+Stat Model (sklearn)      Intuition Model (sklearn)
+LinearRegression on       LogisticRegression trained
+box score stats →         on swipe history +
+baseline fantasy PPG      draft picks → personal
+ranking                   preference scores
+      │                          │
+      └──────────────┬───────────┘
+                     ▼
+              Blended Ranker
+         65% stat rank + 35% intuition
+         Round-robin tournament → top 40
+         exported to Excel
 ```
 
-1. **ETL Pipeline** pulls three seasons of NBA per-game stats via `nba_api`, computes ESPN fantasy points per game for every player, and stores everything in SQLite.
-2. **Stat Model (R)** runs a predictive regression trained on past seasons to project current-season fantasy value, produces four diagnostic plots, and quantifies which raw stats drive fantasy output under this scoring.
-3. **Intuition Model (sklearn)** trains a logistic regression on my past draft picks and head-to-head player swipes to learn what I *actually* value — not what the stats say I should value. The Flask swipe UI makes this feel like a game.
-4. **LLM Ranker (Claude)** receives the top 30 stat-model players plus my preference profile, and produces a top 20 ranking written in my voice — first-person reasoning, casual tone, like texting my league group chat.
+1. **ETL Pipeline** pulls ESPN fantasy stats for 6 seasons, computes fantasy points per game under my league's scoring, and stores everything in SQLite.
+2. **Stat Model** (`models/stat_model.py`) fits a `LinearRegression` trained on 2022–24 seasons to predict current-season fantasy PPG. Also generates four diagnostic plots (tier chart, correlation heatmap, positional boxplot, predicted vs actual).
+3. **Intuition Model** (`models/intuition_model.py`) trains a `LogisticRegression` on pairwise comparisons — swipes from the Flask UI and implicit preferences inferred from draft order. It learns which stats I actually value, not what the model says I should.
+4. **Blended Ranker** (`models/ranker.py`) takes the top 60 players by fantasy PPG, runs a round-robin tournament using the intuition model, then blends 65% stat rank + 35% intuition score into a final top 40.
 
 ---
 
@@ -39,12 +42,12 @@ Visualizations       + draft picks
 
 | Layer | Technology |
 |---|---|
-| Data ingestion | Python 3.11+, nba_api |
+| Data ingestion | Python 3.11+, ESPN Fantasy API |
 | Storage | SQLite |
-| Statistical model | R 4.x (tidyverse, broom, ggplot2, RSQLite) |
-| ML intuition model | Python, scikit-learn, joblib |
-| LLM ranker | Python, Anthropic API (claude-sonnet-4-6) |
-| Swipe UI | Python, Flask |
+| Statistical model | scikit-learn (`LinearRegression`) |
+| Intuition model | scikit-learn (`LogisticRegression`), joblib |
+| Swipe UI | Flask |
+| Output | openpyxl (Excel), matplotlib |
 | Analysis notebook | Jupyter |
 | Tests | pytest |
 
@@ -80,15 +83,15 @@ This scoring heavily rewards efficiency, elite perimeter defenders, and playmake
 The core differentiator. Most fantasy tools optimize for a single objective (max fantasy PPG). This model learns what *I* optimize for.
 
 **Training data:**
-- **Swipe history** — each time I pick Player A over Player B in the swipe UI, the model records a delta vector: the difference in stats between winner and loser. Over time, consistent patterns emerge (e.g., I always choose the higher-STL player when STL differs by 1.5+).
-- **Draft history** — players I drafted early are treated as implicit preferences over players I drafted later in the same draft. A round 1 pick is a strong signal (weight 1.0); a round 8 pick is a weak signal (weight 0.30).
+- **Swipe history** — each time I pick Player A over Player B in the swipe UI, the model records a delta vector: the difference in stats between winner and loser. Consistent patterns emerge over time.
+- **Draft history** — players drafted early are treated as implicit preferences over players drafted later in the same draft. Round 1 picks carry weight 1.0; round 8 carries 0.30.
 
-**Feature vector:** `[Δpts, Δfg3m, Δast, Δstl, Δblk, Δreb, Δtov, Δfantasy_ppg, Δconsistency]`
+**Feature vector (18 delta features — winner minus loser):**
+`Δpts, Δreb, Δast, Δstl, Δblk, Δtov, Δfg3m, Δfg3a, Δfgm, Δfga, Δftm, Δfta, Δusage/game, Δmin, Δgp, Δposition, Δgp_prev_season, Δteam_win_pct`
 
-**Output:** A preference profile string like:
-> "You overweight STL (+2.3x) and BLK (+1.9x) relative to raw fantasy value. AST is your 3rd strongest signal (+1.4x). You underweight high-volume scorers with poor efficiency (-0.8x on FGA). Based on draft history, you lean toward guards in early rounds."
+Note: `fantasy_ppg` is intentionally excluded — it's a weighted sum of the above stats, so including it would double-count and obscure which individual stats I actually value.
 
-**Confidence levels:** LOW (<20 swipes) · MEDIUM (20-40) · HIGH (40+)
+**Confidence levels:** LOW (<20 swipes) · MEDIUM (20–40) · HIGH (40+)
 
 ---
 
@@ -96,22 +99,11 @@ The core differentiator. Most fantasy tools optimize for a single objective (max
 
 **Prerequisites:**
 - Python 3.11+
-- R 4.x
-- An Anthropic API key
+- ESPN league credentials in `.env` (see `.env` — already configured if cloned privately)
 
-**Install Python dependencies:**
+**Install dependencies:**
 ```bash
 pip install -r requirements.txt
-```
-
-**Install R packages:**
-```bash
-Rscript install_r_packages.R
-```
-
-**Set your API key:**
-```bash
-export ANTHROPIC_API_KEY=your_key_here
 ```
 
 ---
@@ -119,7 +111,7 @@ export ANTHROPIC_API_KEY=your_key_here
 ## How to Run
 
 ```bash
-# 1. Pull NBA stats and populate the database (~10-20 min first run)
+# 1. Pull ESPN stats and populate the database
 python main.py ingest
 
 # 2. Launch the swipe UI and start building your preference model
@@ -128,45 +120,26 @@ python main.py swipe
 # 3. Train the intuition model on your swipes + draft history
 python main.py train
 
-# 4. Run the R statistical analysis and generate plots
-python main.py r-analysis
-
-# 5. Generate your personalized weekly top 20
+# 4. Generate personalized top-40 rankings (Excel + terminal table)
 python main.py rankings
 
-# 6. Check system status
+# 5. Rank a specific season or player subset
+python main.py rank 2023-24 "Jokic,Luka,SGA"
+
+# 6. Re-sync draft history from ESPN
+python main.py espn-import
+
+# 7. Run stat model analysis and generate diagnostic plots
+python main.py stat-model
+
+# 8. Export all seasons to Excel
+python main.py export
+
+# 9. Check system status (DB counts, model confidence, injury flags)
 python main.py status
 
-# 7. Run tests
+# 10. Run tests
 python main.py test
-```
-
----
-
-## Sample Output
-
-```
----
-Rank 1 | Nikola Jokic | DEN | C | Proj: 76.8 pts | Model rank: #1 (—)
-He's the clear #1, no debate needed. Triple-double floor every night, elite efficiency, and 
-the assists put him in a tier of his own under this scoring.
----
-Rank 2 | Shai Gilgeous-Alexander | OKC | PG | Proj: 70.3 pts | Model rank: #2 (—)
-SGA's STL numbers are what push him here — averaging 2+ steals a game at 4 pts each is 
-a massive bonus that pure-scorer rankings miss.
----
-Rank 3 | Alex Caruso | OKC | SG | Proj: 36.4 pts | Model rank: #31 (↑28) ⚠️ Big mover
-This is all intuition model — his raw fantasy PPG doesn't justify this rank, but 2.4 STL 
-and 0.7 BLK with clean shot selection is exactly my kind of player. The model learned 
-I always pick the defensive specialist in toss-ups.
----
-Rank 4 | Tyrese Haliburton | IND | PG | Proj: 57.2 pts | Model rank: #5 (↑1)
-10+ assists a night at 2 pts each is just math. If he's healthy this is an easy top-5 pick.
----
-Rank 5 | Giannis Antetokounmpo | MIL | PF | Proj: 66.4 pts | Model rank: #3 (↓2)
-I'd normally have him higher but the FTA penalty is real — he shoots over 10 a game and 
-misses enough that it chips into his total. STL/BLK make up for it, but barely at this cost.
----
 ```
 
 ---
@@ -176,5 +149,4 @@ misses enough that it chips into his total. STL/BLK make up for it, but barely a
 - **Waiver wire recommender** — surface top available players each week based on preference profile
 - **Trade analyzer** — evaluate proposed trades using stat model + intuition weighting
 - **Opponent scouting** — analyze upcoming matchup opponent's roster weaknesses
-- **Injury news scraping** — automate the injury context input for the LLM ranker so I don't have to type it manually
 - **Multi-season preference drift** — track how my preferences change year over year as my league format evolves
