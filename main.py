@@ -202,19 +202,46 @@ def cmd_insights() -> None:
         if lines:
             queries.append(block.rstrip(";"))
 
-    titles = [
-        "Top 30 by Fantasy PPG",
-        "Top 10 per Position",
-        "Value Over Replacement",
-        "Hidden Gems (drafted after round 8, now top-40)",
-        "Year-over-Year Risers (up 15%+)",
+    queries_meta = [
+        (
+            "Top 30 by Fantasy PPG",
+            "Baseline ranking by raw production. Use this to see who the model"
+            " has to work with before any personal preferences are applied.",
+        ),
+        (
+            "Top 10 per Position",
+            "Positional scarcity matters in drafts. A PG ranked 8th overall might"
+            " be the 2nd-best PG available -- this shows the depth at each spot"
+            " so you know when to reach vs. wait.",
+        ),
+        (
+            "Value Over Replacement",
+            "Raw PPG does not tell the full story. A center averaging 43 points"
+            " is more valuable than a point guard averaging 43 points if the"
+            " average center scores 30 and the average PG scores 34. VOR"
+            " measures how much better a player is than the baseline you could"
+            " get off the waiver wire at that position.",
+        ),
+        (
+            "Hidden Gems (drafted after round 8, now top-40)",
+            "Cross-references your personal draft history against current"
+            " performance. Any player here was considered a late-round flier"
+            " at draft time but is now producing like a top-40 asset -- the"
+            " kind of pick that wins leagues.",
+        ),
+        (
+            "Year-over-Year Risers (up 15%+)",
+            "Identifies breakout candidates before a draft. A player who jumped"
+            " 30% in fantasy PPG from one season to the next is either in a"
+            " better role, on a better team, or has genuinely improved --"
+            " worth targeting early before the rest of the league catches on.",
+        ),
     ]
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
-    for i, (title, sql) in enumerate(zip(titles, queries)):
-        # Query 5 needs prev_season; skip if we don't have one
+    for (title, why), sql in zip(queries_meta, queries):
         if ":prev_season" in sql and not prev_season:
             continue
 
@@ -230,6 +257,7 @@ def cmd_insights() -> None:
 
         print(f"\n{'='*60}")
         print(f"  {title}")
+        print(f"  Why: {why}")
         print(f"{'='*60}")
         if not rows:
             print("  (no results)")
