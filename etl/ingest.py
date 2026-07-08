@@ -129,7 +129,6 @@ def run_ingest() -> None:
             print("no data (ESPN may not have this year)")
             continue
 
-        # Fetch team standings for this season year
         standings = fetch_standings(year)
 
         for p in players:
@@ -145,7 +144,6 @@ def run_ingest() -> None:
                 conn, p["espn_id"], p["name"], p["position"],
                 p["injury_status"] if season == CURRENT_SEASON else "ACTIVE",
             )
-            # Update current team on the players row
             if p["team_abbr"]:
                 conn.execute(
                     "UPDATE players SET team=? WHERE player_id=?",

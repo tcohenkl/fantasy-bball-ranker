@@ -1,5 +1,6 @@
 """Flask swipe UI for collecting player preference data."""
 
+import random
 import sys
 import threading
 from datetime import datetime
@@ -17,8 +18,6 @@ app = Flask(__name__)
 RETRAIN_EVERY   = 20
 MIN_GP_FOR_SWIPE = 15
 
-
-# ── Query helpers ──────────────────────────────────────────────────────────────
 
 def _top_players(limit: int = 100) -> list[dict]:
     conn = get_conn()
@@ -76,7 +75,7 @@ def _pick_matchup() -> tuple[dict, dict] | None:
             if frozenset([a["player_id"], b["player_id"]]) not in seen
         ]
 
-    return __import__("random").choice(candidates) if candidates else None
+    return random.choice(candidates) if candidates else None
 
 
 def _swipe_count() -> int:
@@ -95,8 +94,6 @@ def _trigger_retrain() -> None:
 
     threading.Thread(target=_work, daemon=True).start()
 
-
-# ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -214,8 +211,6 @@ def stats():
         preference_profile=get_preference_profile(),
     )
 
-
-# ── Entry point ────────────────────────────────────────────────────────────────
 
 def run_app(debug: bool = False) -> None:
     print("Swipe UI running at http://localhost:5001")

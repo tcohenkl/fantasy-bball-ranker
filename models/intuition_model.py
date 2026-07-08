@@ -1,17 +1,12 @@
-"""
-Intuition model: logistic regression trained on swipe history and draft picks.
-
-Delta vector (winner - loser) captures what you implicitly value:
-  Counting: pts, reb, ast, stl, blk, tov
-  Shooting: fg3m, fg3a, fgm, fga, ftm, fta
-  Usage:    min/game, gp (current season)
-  Context:  position, gp_prev_season, team_win_pct
-
-fantasy_ppg is intentionally excluded — it's a weighted sum of the above stats,
-so including it would double-count and obscure which individual stats you actually value.
-"""
+# Logistic regression trained on swipe history and draft picks.
+#
+# Each training sample is a delta vector (winner stats minus loser stats),
+# so the model learns which stat differences actually drove my choices.
+# fantasy_ppg is excluded because it is a weighted sum of the other stats --
+# including it would double-count and hide which individual stats I value.
 
 import json
+import random
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +24,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import CURRENT_SEASON, OUTPUT_DIR, get_conn
 
-# Position encoding: PG=1 → C=5 so delta captures guard/big preference
+# Ordinal encoding so the delta captures guard/big preference (PG=1, C=5)
 _POS_CODE: dict[str, float] = {
     "PG": 1.0, "SG": 2.0, "G": 1.5,
     "SF": 3.0, "F": 3.5,
@@ -50,14 +45,16 @@ FEATURES = [
     "delta_fga",
     "delta_ftm",
     "delta_fta",
-    "delta_usg_pg",        # usage per game: FGA + 0.44*FTA + TOV (ball-dominant possession proxy)
+    "delta_usg_pg",        # FGA + 0.44*FTA + TOV per game (ball-dominant possession proxy)
     "delta_min",
     "delta_gp",
-    "delta_position",      # PG=1..C=5
-    "delta_gp_prev",       # prior-season GP — injury availability signal
-    "delta_team_win_pct",  # team W% from ESPN standings
+    "delta_position",
+    "delta_gp_prev",       # prior-season GP as an injury availability signal
+    "delta_team_win_pct",
 ]
 
+# Draft round weights: early picks are strong signals, late picks are weak.
+# Pairs more than 4 rounds apart are excluded to avoid spurious signals.
 ROUND_WEIGHTS = {
     1: 1.00, 2: 0.85, 3: 0.75, 4: 0.65, 5: 0.55,
     6: 0.45, 7: 0.38, 8: 0.30, 9: 0.25, 10: 0.20,
@@ -68,13 +65,8 @@ DARK_BG  = "#1a1a2e"
 PANEL_BG = "#16213e"
 
 
-# ── Data loading ───────────────────────────────────────────────────────────────
-
 def _player_stats_map(season: str = CURRENT_SEASON) -> dict[int, dict]:
-    """
-    Returns {player_id: {stat: value, ...}} for the season.
-    Includes context features (is_rookie, team_win_pct_prev, gp_prev_season, position).
-    """
+    """Returns {player_id: stat_dict} for all players with data in the given season."""
     conn = get_conn()
     rows = conn.execute(
         """
@@ -148,13 +140,11 @@ def _load_artifact() -> dict | None:
     if not path:
         return None
     artifact = joblib.load(path)
-    # Guard against models trained with the old (9-feature) vector
+    # Reject models trained before the feature vector was expanded
     if len(artifact["clf"].coef_[0]) != len(FEATURES):
         return None
     return artifact
 
-
-# ── Dataset building ───────────────────────────────────────────────────────────
 
 def _build_swipe_dataset(stats_map: dict[int, dict]) -> tuple[list, list]:
     conn = get_conn()
@@ -176,10 +166,8 @@ def _build_swipe_dataset(stats_map: dict[int, dict]) -> tuple[list, list]:
 def _build_draft_dataset() -> tuple[list, list]:
     """
     Synthetic preference signals from draft order.
-
-    Critically: each pick is matched against the stats from THAT YEAR's season,
-    not the current season. A 2022-23 first-rounder is compared using 2022-23 stats,
-    so rookies of 2022-23 correctly appear with is_rookie=1 in the training signal.
+    Each pick is matched against stats from that same season so the model
+    sees the right context (e.g. a 2022-23 first-rounder compared using 2022-23 stats).
     """
     from collections import defaultdict
     from db import ALL_SEASONS
@@ -190,23 +178,19 @@ def _build_draft_dataset() -> tuple[list, list]:
     ).fetchall()
     conn.close()
 
-    name_to_id = _name_to_id_map()
-
-    # Load stats for every season we have data for
-    season_stats: dict[str, dict[int, dict]] = {s: _player_stats_map(s) for s in ALL_SEASONS}
+    name_to_id   = _name_to_id_map()
+    season_stats = {s: _player_stats_map(s) for s in ALL_SEASONS}
 
     by_season: dict[str, list] = defaultdict(list)
     for p in picks:
-        pid        = name_to_id.get(p["player_name"].lower())
-        draft_year = p["season"]
-        # Use that year's stats; fall back to adjacent seasons if the player wasn't active
+        pid = name_to_id.get(p["player_name"].lower())
         stats = None
-        for candidate_season in [draft_year] + ALL_SEASONS:
+        for candidate_season in [p["season"]] + ALL_SEASONS:
             if pid and pid in season_stats.get(candidate_season, {}):
                 stats = season_stats[candidate_season][pid]
                 break
         if pid and stats:
-            by_season[draft_year].append((int(p["round"]), stats))
+            by_season[p["season"]].append((int(p["round"]), stats))
 
     X, y = [], []
     for season_picks in by_season.values():
@@ -222,8 +206,6 @@ def _build_draft_dataset() -> tuple[list, list]:
                     X.append(_delta(late_stats, early_stats));  y.append(0)
     return X, y
 
-
-# ── Training ───────────────────────────────────────────────────────────────────
 
 def train_model() -> dict:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -296,8 +278,6 @@ def train_model() -> dict:
     return metrics
 
 
-# ── Learning curve plot ────────────────────────────────────────────────────────
-
 def _plot_learning_curve(clf: LogisticRegression, scaler: StandardScaler,
                          X_raw: np.ndarray, y: np.ndarray) -> None:
     X = scaler.transform(X_raw)
@@ -318,12 +298,12 @@ def _plot_learning_curve(clf: LogisticRegression, scaler: StandardScaler,
         ax.plot(sizes, mu, "o-", color=color, label=label)
         ax.fill_between(sizes, mu - std, mu + std, alpha=0.15, color=color)
 
-    ax.axvline(20, color="#60a5fa", linestyle="--", alpha=0.6, label="LOW → MEDIUM (20 swipes)")
-    ax.axvline(40, color="#a78bfa", linestyle="--", alpha=0.6, label="MEDIUM → HIGH (40 swipes)")
+    ax.axvline(20, color="#60a5fa", linestyle="--", alpha=0.6, label="LOW -> MEDIUM (20 swipes)")
+    ax.axvline(40, color="#a78bfa", linestyle="--", alpha=0.6, label="MEDIUM -> HIGH (40 swipes)")
 
     ax.set_xlabel("Training samples", color="white")
     ax.set_ylabel("Accuracy", color="white")
-    ax.set_title("Intuition Model — Learning Curve", color="white", fontsize=14)
+    ax.set_title("Intuition Model -- Learning Curve", color="white", fontsize=14)
     ax.tick_params(colors="white")
     ax.legend(facecolor=DARK_BG, labelcolor="white")
     for spine in ax.spines.values():
@@ -335,8 +315,6 @@ def _plot_learning_curve(clf: LogisticRegression, scaler: StandardScaler,
     plt.close()
     print("  Saved: outputs/learning_curve.png")
 
-
-# ── Public API ─────────────────────────────────────────────────────────────────
 
 def get_preference_profile() -> str:
     artifact = _load_artifact()
@@ -350,9 +328,7 @@ def get_preference_profile() -> str:
     negs = [(s, c) for s, c in ranked if c < -0.3]
 
     def label(f: str) -> str:
-        return (f.replace("delta_", "")
-                 .replace("_", " ")
-                 .upper())
+        return f.replace("delta_", "").replace("_", " ").upper()
 
     opening = (
         f"You overweight {label(top3[0][0])} (+{top3[0][1]:.1f}x) and "
@@ -360,8 +336,8 @@ def get_preference_profile() -> str:
         if top3[0][1] > 0.5
         else f"Your top signals are {label(top3[0][0])} and {label(top3[1][0])}."
     )
-    mid  = f" {label(top3[2][0])} is your 3rd strongest signal (+{top3[2][1]:.1f}x)." if len(top3) >= 3 else ""
-    neg  = f" You underweight {label(negs[0][0])} ({negs[0][1]:.1f}x)." if negs else ""
+    mid = f" {label(top3[2][0])} is your 3rd strongest signal (+{top3[2][1]:.1f}x)." if len(top3) >= 3 else ""
+    neg = f" You underweight {label(negs[0][0])} ({negs[0][1]:.1f}x)." if negs else ""
 
     conn = get_conn()
     try:

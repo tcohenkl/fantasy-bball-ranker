@@ -106,7 +106,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         """
     )
 
-    # Migrate existing DBs — SQLite ignores these if column already exists
+    # Migrate existing DBs (SQLite ignores these if the column already exists)
     _add_column_if_missing(conn, "players",      "espn_id        INTEGER")
     _add_column_if_missing(conn, "players",      "injury_status  TEXT DEFAULT 'ACTIVE'")
     _add_column_if_missing(conn, "player_stats", "fg3a              REAL    DEFAULT 0")

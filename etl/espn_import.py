@@ -1,23 +1,17 @@
-"""
-Pull player universe + stats from ESPN Fantasy Basketball.
-
-All data comes from the mRoster view which returns every rostered player with
-their real NBA season stats and live injury status.  No other API needed.
-
-Confirmed ESPN stat category IDs (verified against Jokic/Curry/Shai 2025-26):
-  [0]  PTS total      [1]  BLK total      [2]  STL total
-  [3]  AST total      [4]  OREB total     [5]  DREB total
-  [6]  REB total      [9]  TOV total
-  [13] FGM total      [14] FGA total
-  [15] FTM total      [16] FTA total
-  [17] 3PM total      [18] 3PA total
-  [42] GP (games played)
-
-Percentages (pre-computed by ESPN, ignored — we compute our own):
-  [19] FG%            [20] FT%           [21] 3P%
-
-All values with statSplitTypeId=0, statSourceId=0, scoringPeriodId=0 = full season actual.
-"""
+# Pull player universe and stats from the ESPN Fantasy Basketball API.
+#
+# All data comes from the mRoster view which returns every rostered player
+# with their real NBA season stats and live injury status.
+#
+# ESPN stat category IDs (verified against Jokic/Curry/SGA 2025-26):
+#   [0]  PTS total      [1]  BLK total      [2]  STL total
+#   [3]  AST total      [6]  REB total      [9]  TOV total
+#   [13] FGM total      [14] FGA total      [15] FTM total
+#   [16] FTA total      [17] 3PM total      [18] 3PA total
+#   [42] GP
+#
+# All values use statSplitTypeId=0, statSourceId=0, scoringPeriodId=0
+# which corresponds to full-season actuals.
 
 import json
 import os
@@ -32,25 +26,12 @@ from db import create_tables, get_conn
 
 _API_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba"
 
+# ESPN returns a numeric defaultPositionId rather than a position string.
+# IDs 1-5 are the primary slots; 6-9 are the flex/multi-position eligible slots,
+# which map to the same labels since we only need the canonical position.
 _POSITION_MAP = {
     1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C",
     6: "SG", 7: "SF", 8: "PF", 9: "C",
-}
-
-# Maps ESPN numeric stat IDs → our field names
-_ESPN_STAT = {
-    "0":  "pts",
-    "1":  "blk",
-    "2":  "stl",
-    "3":  "ast",
-    "6":  "reb",
-    "9":  "tov",
-    "13": "fgm",
-    "14": "fga",
-    "15": "ftm",
-    "16": "fta",
-    "17": "fg3m",
-    "42": "gp",
 }
 
 
@@ -59,7 +40,7 @@ def _espn_year_to_season(year: int) -> str:
 
 
 def _season_to_espn_year(season: str) -> int:
-    return int(season[:4]) + 1  # "2024-25" → 2025
+    return int(season[:4]) + 1  # "2024-25" -> 2025
 
 
 class ESPNClient:
@@ -95,7 +76,7 @@ class ESPNClient:
         return d.get("draftDetail", {}).get("picks", []) if d else []
 
     def resolve_players(self, player_ids: list[int], reference_year: int = 2026) -> dict[int, dict]:
-        """Batch-resolve ESPN player IDs → {name, position}."""
+        """Batch-resolve ESPN player IDs to {name, position} dicts."""
         result = {}
         for i in range(0, len(player_ids), 50):
             batch = player_ids[i : i + 50]
@@ -117,13 +98,8 @@ class ESPNClient:
 
     def fetch_season(self, year: int, top_n: int = 100) -> list[dict]:
         """
-        Fetch all rostered players for `year` with their full-season NBA stats.
-        Returns list of player dicts sorted by fantasy_ppg desc, capped at top_n.
-
-        Each dict has:
-          espn_id, name, position, injury_status,
-          gp, pts, reb, ast, stl, blk, tov, fgm, fga, ftm, fta, fg3m,
-          fantasy_ppg (computed from stats)
+        Fetch all rostered players for the given year with full-season NBA stats.
+        Returns a list sorted by fantasy_ppg descending, capped at top_n.
         """
         from etl.scoring import compute_fantasy_score
 
@@ -143,7 +119,7 @@ class ESPNClient:
                     continue
                 seen.add(pid)
 
-                name   = player.get("fullName", "").strip()
+                name = player.get("fullName", "").strip()
                 if not name:
                     continue
 
@@ -166,7 +142,6 @@ class ESPNClient:
                 if gp == 0:
                     continue
 
-                # Per-game averages
                 def _pg(key: str) -> float:
                     return stats_dict.get(key, 0.0) / gp
 
@@ -209,12 +184,9 @@ class ESPNClient:
                     "fantasy_ppg":   round(fantasy_ppg, 2),
                 })
 
-        # Sort by fantasy PPG and return top_n
         players.sort(key=lambda p: p["fantasy_ppg"], reverse=True)
         return players[:top_n]
 
-
-# ── Draft import ───────────────────────────────────────────────────────────────
 
 def import_all_drafts(league_id: int, espn_s2: str, swid: str,
                       team_id: int = 2, replace: bool = True) -> int:
@@ -272,8 +244,6 @@ def import_all_drafts(league_id: int, espn_s2: str, swid: str,
     return total
 
 
-# ── Public helpers ─────────────────────────────────────────────────────────────
-
 def fetch_player_universe(league_id: int, espn_s2: str, swid: str,
                           year: int = 2026, top_n: int = 100) -> list[dict]:
     """Return top_n players for the given season year with full stats."""
@@ -285,8 +255,6 @@ def fetch_player_universe(league_id: int, espn_s2: str, swid: str,
         print("  Could not fetch ESPN player universe (check credentials or try later).")
     return players
 
-
-# ── CLI ────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     import argparse

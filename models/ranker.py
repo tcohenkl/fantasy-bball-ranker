@@ -1,12 +1,6 @@
-"""
-Pure sklearn ranker — no LLM.
-
-Ranking process:
-  1. Take top-40 players by fantasy PPG (stat model baseline)
-  2. Run a round-robin tournament using the trained intuition model
-  3. Blend 65% stat rank + 35% intuition score → final order
-  4. Export to Excel + print table
-"""
+# Blends the stat model baseline (65%) with the intuition model (35%).
+# Top 60 players by fantasy PPG enter a round-robin tournament; each pair
+# is scored by the trained logistic classifier, then merged with the stat rank.
 
 import sys
 from collections import defaultdict
@@ -25,14 +19,13 @@ from models.intuition_model import (
     get_model_confidence,
 )
 
-_STAT_TOP_N  = 60   # players that enter the round-robin tournament
-_FINAL_TOP_N = 40   # players shown in final output
-_BLEND_ALPHA = 0.35
+_STAT_TOP_N  = 60
+_FINAL_TOP_N = 40
+_BLEND_ALPHA = 0.35  # weight given to intuition score vs stat rank
 
-
-# ── Pairwise tournament ────────────────────────────────────────────────────────
 
 def _tournament_scores(players: list[dict], artifact: dict) -> list[float]:
+    """Run every pair through the classifier; accumulate win probabilities."""
     clf, scaler = artifact["clf"], artifact["scaler"]
     n      = len(players)
     scores = [0.0] * n
@@ -45,12 +38,10 @@ def _tournament_scores(players: list[dict], artifact: dict) -> list[float]:
     return scores
 
 
-# ── Core ranking logic (shared by CLI and web) ────────────────────────────────
-
 def _build_ranking(season: str, top_n: int, player_filter: list[str] | None = None) -> tuple[list[dict], str]:
     """
     Returns (ranked_rows, confidence).
-    Each row is the player dict with extra keys: final_rank, stat_rank, movement.
+    Each row is the player dict with final_rank, stat_rank, and movement keys added.
     """
     stats_map = _player_stats_map(season)
     if not stats_map:
@@ -116,8 +107,6 @@ def _build_ranking(season: str, top_n: int, player_filter: list[str] | None = No
     return rows, confidence
 
 
-# ── Excel export ──────────────────────────────────────────────────────────────
-
 def _export_rankings_excel(rows: list[dict], season: str, confidence: str, label: str = "") -> Path:
     try:
         import openpyxl
@@ -152,8 +141,7 @@ def _export_rankings_excel(rows: list[dict], season: str, confidence: str, label
     ws.title = season
     ws.sheet_properties.tabColor = "F97316"
 
-    # Title row
-    title = f"Fantasy Rankings — {season}  |  Confidence: {confidence}  |  {date.today()}"
+    title = f"Fantasy Rankings -- {season}  |  Confidence: {confidence}  |  {date.today()}"
     if label:
         title += f"  |  {label}"
     ws.merge_cells(f"A1:{get_column_letter(len(COLS))}1")
@@ -164,7 +152,6 @@ def _export_rankings_excel(rows: list[dict], season: str, confidence: str, label
     tc.alignment = Alignment(horizontal="left", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    # Header row
     for ci, (col_name, col_w) in enumerate(COLS, 1):
         c = ws.cell(row=2, column=ci, value=col_name)
         c.fill      = HEADER_FILL
@@ -246,8 +233,6 @@ def _export_rankings_excel(rows: list[dict], season: str, confidence: str, label
     return out
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
-
 def generate_rankings(season: str = CURRENT_SEASON, top_n: int = _FINAL_TOP_N) -> list[dict]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     rows, confidence = _build_ranking(season, top_n)
@@ -257,7 +242,7 @@ def generate_rankings(season: str = CURRENT_SEASON, top_n: int = _FINAL_TOP_N) -
 
     _print_table(rows, season, confidence)
     path = _export_rankings_excel(rows, season, confidence)
-    print(f"\n[Saved → {path.name}]")
+    print(f"\n[Saved -> {path.name}]")
     return rows
 
 
@@ -271,13 +256,13 @@ def rank_players(season: str, player_names: list[str] | None = None) -> list[dic
     label = f"Filter: {', '.join(player_names)}" if player_names else ""
     _print_table(rows, season, confidence, label=label)
     path = _export_rankings_excel(rows, season, confidence, label=label)
-    print(f"\n[Saved → {path.name}]")
+    print(f"\n[Saved -> {path.name}]")
     return rows
 
 
 def _print_table(rows: list[dict], season: str, confidence: str, label: str = "") -> None:
     today = date.today().isoformat()
-    hdr   = f"Fantasy Rankings — {season}  [{confidence}]  {today}"
+    hdr   = f"Fantasy Rankings -- {season}  [{confidence}]  {today}"
     if label:
         hdr += f"  |  {label}"
     print(f"\n{hdr}")
@@ -297,13 +282,13 @@ def _print_table(rows: list[dict], season: str, confidence: str, label: str = ""
         ftm     = float(r.get("ftm") or 0)
         fta     = float(r.get("fta") or 0)
         mpg     = float(r.get("min") or 0)
-        fg_pct  = f"{fgm/fga*100:.0f}%" if fga else "—"
-        ft_pct  = f"{ftm/fta*100:.0f}%" if fta else "—"
-        usg     = f"{_usg_pg(r)/mpg*36:.0f}%" if mpg else "—"
+        fg_pct  = f"{fgm/fga*100:.0f}%" if fga else "--"
+        ft_pct  = f"{ftm/fta*100:.0f}%" if fta else "--"
+        usg     = f"{_usg_pg(r)/mpg*36:.0f}%" if mpg else "--"
         abbr    = str(r.get("team_abbr") or "")
         wins    = int(r.get("team_wins") or 0)
         losses  = int(r.get("team_losses") or 0)
-        team    = f"{abbr} {wins}-{losses}" if abbr else "—"
+        team    = f"{abbr} {wins}-{losses}" if abbr else "--"
         inj     = str(r.get("injury_status") or "")
         inj_s   = "OUT" if "OUT" in inj else ("Q" if any(x in inj for x in ("QUEST","DAY","DOUBT")) else "")
         prev    = int(r.get("gp_prev_season") or 0)
@@ -316,7 +301,7 @@ def _print_table(rows: list[dict], season: str, confidence: str, label: str = ""
             f"{float(r.get('ast') or 0):<5.1f} {float(r.get('stl') or 0):<5.1f} "
             f"{float(r.get('blk') or 0):<5.1f} {float(r.get('tov') or 0):<5.1f} "
             f"{float(r.get('fg3m') or 0):<5.1f} {fg_pct:<6} {ft_pct:<6} {usg:<6} "
-            f"{int(r.get('gp') or 0):<4} {prev or '—':<5} {r.get('movement','')}"
+            f"{int(r.get('gp') or 0):<4} {prev or '--':<5} {r.get('movement','')}"
         )
 
 

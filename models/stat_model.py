@@ -1,7 +1,4 @@
-"""
-Statistical model: regression-based player ranking and diagnostic plots.
-Replaces stat_ranker.R — same four outputs, pure Python.
-"""
+# Statistical model: regression-based player ranking and diagnostic plots.
 
 import sys
 from pathlib import Path
@@ -9,7 +6,6 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -28,8 +24,6 @@ GRID_CLR  = "#2a2a2a"
 POS_COLORS = {"PG": "#f97316", "SG": "#4ade80", "SF": "#60a5fa",
               "PF": "#a78bfa", "C":  "#f43f5e"}
 
-
-# ── Data loading ───────────────────────────────────────────────────────────────
 
 def load_data() -> pd.DataFrame:
     conn = get_conn()
@@ -51,14 +45,6 @@ def load_data() -> pd.DataFrame:
     return df
 
 
-# ── Models ─────────────────────────────────────────────────────────────────────
-
-def _fit_regression(X_train: np.ndarray, y_train: np.ndarray) -> LinearRegression:
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    return model
-
-
 def run_predictive_model(df: pd.DataFrame) -> dict:
     """Train on 2022-24, predict 2024-25. Returns metrics and test predictions."""
     train = df[df["season"].isin(["2022-23", "2023-24"])].dropna(subset=FEATURES + ["fantasy_ppg"])
@@ -69,19 +55,20 @@ def run_predictive_model(df: pd.DataFrame) -> dict:
     X_test  = test[FEATURES].values
     y_test  = test["fantasy_ppg"].values
 
-    model  = _fit_regression(X_train, y_train)
+    model  = LinearRegression()
+    model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    rmse   = float(np.sqrt(mean_squared_error(y_test, y_pred)))
-    r2     = float(r2_score(y_train, model.predict(X_train)))
+    rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
+    r2   = float(r2_score(y_train, model.predict(X_train)))
 
     coef_table = pd.DataFrame({
         "feature":     FEATURES,
         "coefficient": model.coef_,
     }).sort_values("coefficient", ascending=False)
 
-    print(f"\n=== Predictive Regression (train: 2022-24  →  test: {CURRENT_SEASON}) ===")
-    print(f"  Train R²:  {r2:.4f}")
+    print(f"\n=== Predictive Regression (train: 2022-24  ->  test: {CURRENT_SEASON}) ===")
+    print(f"  Train R2:  {r2:.4f}")
     print(f"  Test RMSE: {rmse:.3f}")
     print(coef_table.to_string(index=False))
 
@@ -91,9 +78,10 @@ def run_predictive_model(df: pd.DataFrame) -> dict:
 
 
 def run_feature_importance(df: pd.DataFrame) -> pd.DataFrame:
-    """Fit on full dataset. Coefficients show which stats drive fantasy value most."""
-    full = df.dropna(subset=FEATURES + ["fantasy_ppg"])
-    model = _fit_regression(full[FEATURES].values, full["fantasy_ppg"].values)
+    """Fit on full dataset. Shows which stats drive fantasy value most."""
+    full  = df.dropna(subset=FEATURES + ["fantasy_ppg"])
+    model = LinearRegression()
+    model.fit(full[FEATURES].values, full["fantasy_ppg"].values)
 
     table = pd.DataFrame({
         "feature":     FEATURES,
@@ -105,8 +93,6 @@ def run_feature_importance(df: pd.DataFrame) -> pd.DataFrame:
     print(table.to_string(index=False))
     return table
 
-
-# ── Plotting helpers ───────────────────────────────────────────────────────────
 
 def _dark_fig(w: float, h: float):
     fig, ax = plt.subplots(figsize=(w, h))
@@ -126,8 +112,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: outputs/{name}")
 
 
-# ── Plot 1: Player tier scatter ────────────────────────────────────────────────
-
 def plot_tier_chart(df: pd.DataFrame) -> None:
     data = (
         df[(df["season"] == CURRENT_SEASON) & df["consistency_score"].notna() & (df["gp"] >= 15)]
@@ -135,7 +119,7 @@ def plot_tier_chart(df: pd.DataFrame) -> None:
         .reset_index(drop=True)
     )
     if data.empty:
-        print("  Tier chart skipped — no current-season data with consistency scores.")
+        print("  Tier chart skipped -- no current-season data with consistency scores.")
         return
 
     med_x = data["consistency_score"].median()
@@ -149,7 +133,6 @@ def plot_tier_chart(df: pd.DataFrame) -> None:
         ax.scatter(grp["consistency_score"], grp["fantasy_ppg"],
                    color=color, s=40, alpha=0.75, label=pos, zorder=3)
 
-    # Labels for top-40 — stagger vertically to reduce collisions
     for _, row in data[data["name"].isin(top40)].iterrows():
         ax.annotate(
             row["name"],
@@ -166,28 +149,26 @@ def plot_tier_chart(df: pd.DataFrame) -> None:
     y_min = data["fantasy_ppg"].min()
 
     for label, xpos, ypos, color in [
-        ("Safe Stars",          med_x * 0.25, y_max * 0.96, "#4ade80"),
-        ("Boom or Bust",        x_max * 0.82, y_max * 0.96, "#f97316"),
-        ("Reliable Bench",      med_x * 0.25, y_min * 1.10, "#60a5fa"),
-        ("Skip",                x_max * 0.82, y_min * 1.10, "#f43f5e"),
+        ("Safe Stars",    med_x * 0.25, y_max * 0.96, "#4ade80"),
+        ("Boom or Bust",  x_max * 0.82, y_max * 0.96, "#f97316"),
+        ("Reliable Bench",med_x * 0.25, y_min * 1.10, "#60a5fa"),
+        ("Skip",          x_max * 0.82, y_min * 1.10, "#f43f5e"),
     ]:
         ax.text(xpos, ypos, label, color=color, fontsize=9, fontweight="bold")
 
-    ax.set_xlabel("Consistency Score (std dev — lower = more consistent)", color=TEXT_CLR)
+    ax.set_xlabel("Consistency Score (std dev -- lower = more consistent)", color=TEXT_CLR)
     ax.set_ylabel("Fantasy PPG", color=TEXT_CLR)
-    ax.set_title(f"Player Tier Chart — {CURRENT_SEASON}", color=TEXT_CLR, fontsize=14)
+    ax.set_title(f"Player Tier Chart -- {CURRENT_SEASON}", color=TEXT_CLR, fontsize=14)
     ax.legend(facecolor=DARK_BG, labelcolor=TEXT_CLR, title="Position",
               title_fontsize=8, framealpha=0.8)
 
     _save(fig, "player_tiers.png")
 
 
-# ── Plot 2: Correlation heatmap ────────────────────────────────────────────────
-
 def plot_correlation_heatmap(df: pd.DataFrame) -> None:
-    cols  = FEATURES + ["fantasy_ppg"]
-    corr  = df[cols].dropna().corr()
-    n     = len(cols)
+    cols = FEATURES + ["fantasy_ppg"]
+    corr = df[cols].dropna().corr()
+    n    = len(cols)
 
     fig, ax = _dark_fig(12, 10)
     cmap    = plt.get_cmap("RdBu_r")
@@ -200,17 +181,15 @@ def plot_correlation_heatmap(df: pd.DataFrame) -> None:
 
     for i in range(n):
         for j in range(n):
-            val  = corr.values[i, j]
-            text = ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                           fontsize=7.5, color="white" if abs(val) > 0.4 else "#aaa")
+            val = corr.values[i, j]
+            ax.text(j, i, f"{val:.2f}", ha="center", va="center",
+                    fontsize=7.5, color="white" if abs(val) > 0.4 else "#aaa")
 
     fig.colorbar(im, ax=ax, fraction=0.03, pad=0.04).ax.yaxis.set_tick_params(color=TEXT_CLR)
     ax.set_title("Stat Correlation Heatmap", color=TEXT_CLR, fontsize=14)
 
     _save(fig, "stat_correlation_heatmap.png")
 
-
-# ── Plot 3: Positional boxplot ─────────────────────────────────────────────────
 
 def plot_positional_boxplot(df: pd.DataFrame) -> None:
     positions = ["PG", "SG", "SF", "PF", "C"]
@@ -219,7 +198,7 @@ def plot_positional_boxplot(df: pd.DataFrame) -> None:
         .dropna(subset=["fantasy_ppg"])
     )
     if data.empty:
-        print("  Positional boxplot skipped — no current-season data.")
+        print("  Positional boxplot skipped -- no current-season data.")
         return
 
     grouped = [data[data["position"] == pos]["fantasy_ppg"].values for pos in positions]
@@ -237,13 +216,11 @@ def plot_positional_boxplot(df: pd.DataFrame) -> None:
     ax.set_xticks(range(1, len(positions) + 1))
     ax.set_xticklabels(positions, color=TEXT_CLR)
     ax.set_ylabel("Fantasy PPG", color=TEXT_CLR)
-    ax.set_title(f"Fantasy PPG by Position — {CURRENT_SEASON}", color=TEXT_CLR, fontsize=14)
+    ax.set_title(f"Fantasy PPG by Position -- {CURRENT_SEASON}", color=TEXT_CLR, fontsize=14)
     ax.yaxis.grid(True, color=GRID_CLR, linewidth=0.6)
 
     _save(fig, "positional_value_boxplot.png")
 
-
-# ── Plot 4: Predicted vs actual ────────────────────────────────────────────────
 
 def plot_predicted_vs_actual(test_df: pd.DataFrame, rmse: float) -> None:
     data = test_df.dropna(subset=["fantasy_ppg", "predicted_ppg"])
@@ -264,14 +241,12 @@ def plot_predicted_vs_actual(test_df: pd.DataFrame, rmse: float) -> None:
 
     ax.set_xlabel("Predicted Fantasy PPG", color=TEXT_CLR)
     ax.set_ylabel("Actual Fantasy PPG",    color=TEXT_CLR)
-    ax.set_title(f"Predicted vs Actual — {CURRENT_SEASON} Test Set", color=TEXT_CLR, fontsize=14)
+    ax.set_title(f"Predicted vs Actual -- {CURRENT_SEASON} Test Set", color=TEXT_CLR, fontsize=14)
     ax.legend(facecolor=DARK_BG, labelcolor=TEXT_CLR, title="Position",
               title_fontsize=8, framealpha=0.8)
 
     _save(fig, "predicted_vs_actual.png")
 
-
-# ── Public entry point ─────────────────────────────────────────────────────────
 
 def run_analysis() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
