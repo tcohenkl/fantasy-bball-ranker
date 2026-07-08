@@ -86,7 +86,7 @@ Note: `fantasy_ppg` is intentionally excluded (since it's a weighted sum of the 
 
 **Prerequisites:**
 - Python 3.11+
-- ESPN league credentials in `.env` (see `.env` : already configured if cloned privately)
+- ESPN league credentials in `.env`
 
 **Install dependencies:**
 ```bash
