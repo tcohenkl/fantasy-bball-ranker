@@ -3,32 +3,7 @@
 **A pure ML ranker that ranks NBA players the way I would, trained on my own draft history and player preferences.**
 
 
----
-
-## How It Works
-
-```
-ESPN Fantasy API
-      │
-      ▼
- ETL Pipeline (Python)
- SQLite Database
-      │
-      ├──────────────────────────┐
-      ▼                          ▼
-Stat Model (sklearn)      Intuition Model (sklearn)
-LinearRegression on       LogisticRegression trained
-box score stats →         on swipe history +
-baseline fantasy PPG      draft picks → personal
-ranking                   preference scores
-      │                          │
-      └──────────────┬───────────┘
-                     ▼
-              Blended Ranker
-         65% stat rank + 35% intuition
-         Round-robin tournament → top 40
-         exported to Excel
-```
+--
 
 1. **ETL Pipeline** pulls ESPN fantasy stats for 6 seasons, computes fantasy points per game under my league's scoring, and stores everything in SQLite.
 2. **Stat Model** (`models/stat_model.py`) fits a `LinearRegression` trained on 2019–24 seasons to predict current-season fantasy PPG. Also generates four diagnostic plots (tier chart, correlation heatmap, positional boxplot, predicted vs actual).
@@ -82,13 +57,13 @@ This scoring heavily rewards efficiency, elite perimeter defenders, and playmake
 The core differentiator. Most fantasy tools optimize for a single objective (max fantasy PPG). This model learns what *I* optimize for.
 
 **Training data:**
-- **Swipe history** — each time I pick Player A over Player B in the swipe UI, the model records a delta vector: the difference in stats between winner and loser. Consistent patterns emerge over time.
-- **Draft history** — players drafted early are treated as implicit preferences over players drafted later in the same draft. Round 1 picks carry weight 1.0; round 8 carries 0.30.
+- **Swipe history** Each time I pick Player A over Player B in the swipe UI, the model records a delta vector: the difference in stats between winner and loser. Consistent patterns emerge over time.
+- **Draft history** Players drafted early are treated as implicit preferences over players drafted later in the same draft. Round 1 picks carry weight 1.0; round 8 carries 0.30.
 
 **Feature vector (18 delta features — winner minus loser):**
 `Δpts, Δreb, Δast, Δstl, Δblk, Δtov, Δfg3m, Δfg3a, Δfgm, Δfga, Δftm, Δfta, Δusage/game, Δmin, Δgp, Δposition, Δgp_prev_season, Δteam_win_pct`
 
-Note: `fantasy_ppg` is intentionally excluded — it's a weighted sum of the above stats, so including it would double-count and obscure which individual stats I actually value.
+Note: `fantasy_ppg` is intentionally excluded (since it's a weighted sum of the above stats, so including it would double-count and obscure which individual stats I actually value)
 
 **Confidence levels:** LOW (<20 swipes) · MEDIUM (20–40) · HIGH (40+)
 
