@@ -134,5 +134,5 @@ python main.py test
 
 - **Waiver wire recommender** : surface top available players each week based on preference profile
 - **Trade analyzer** : evaluate proposed trades using stat model + intuition weighting
-- **Opponent scouting** — analyze upcoming matchup opponent's roster weaknesses
-- **Multi-season preference drift** — track how my preferences change year over year as my league format evolves
+- **Opponent scouting** : analyze upcoming matchup opponent's roster weaknesses
+- **Multi-season preference drift** : track how my preferences change year over year as my league format evolves
